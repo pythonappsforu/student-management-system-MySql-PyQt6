@@ -4,9 +4,12 @@ from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QGridLayout, \
      QVBoxLayout, QComboBox, QToolBar, QStatusBar, QMessageBox
 from PyQt6.QtGui import QAction, QIcon
 import sys
-import sqlite3
+import mysql.connector
 import os
+from dotenv import load_dotenv
 
+
+load_dotenv()
 # for debugging purpose
 os.environ['QT_DEBUG_PLUGINS'] = '1'
 os.environ['QT_FATAL_WARNINGS']='1'
@@ -16,11 +19,17 @@ os.environ['QT_QPA_PLATFORM_PLUGIN_PATH']=os.getenv('QT_QPA_PLATFORM_PLUGIN_PATH
 
 
 class DatabaseConnection:
-    def __init__(self, database_file="database.db"):
-        self.database_file = database_file
+    def __init__(self, host='localhost',user='root',password=os.getenv('password'),
+                 database="school"):
+
+        self.host = host
+        self.user = user
+        self.password = password
+        self.database = database
 
     def connect(self):
-        connection = sqlite3.connect(self.database_file)
+        connection = mysql.connector.connect(host=self.host,user=self.user,
+                                             password=self.password,database=self.database)
         return connection
 
 
@@ -85,7 +94,9 @@ class MainWindow(QMainWindow):
 
     def load_data(self):
         connection = DatabaseConnection().connect()
-        result = connection.execute("SELECT * FROM students")
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM students")
+        result =cursor.fetchall()
         self.table.setRowCount(0)
         for row_number, row_data in enumerate(result):
             self.table.insertRow(row_number)
@@ -168,7 +179,7 @@ class EditDialog(QDialog):
     def update_student(self):
         connection = DatabaseConnection().connect()
         cursor = connection.cursor()
-        cursor.execute("UPDATE students SET name = ?, course = ?, mobile = ? WHERE id = ?",
+        cursor.execute("UPDATE students SET name = %s, course = %s, mobile = %s WHERE id = %s",
                        (self.student_name.text(),
                         self.course_name.itemText(self.course_name.currentIndex()),
                         self.mobile.text(),
@@ -203,9 +214,9 @@ class DeleteDialog(QDialog):
         index = main_window.table.currentRow()
         student_id = main_window.table.item(index, 0).text()
 
-        connection = sqlite3.connect("database.db")
+        connection = DatabaseConnection().connect()
         cursor = connection.cursor()
-        cursor.execute("DELETE from students WHERE id = ?", (student_id, ))
+        cursor.execute("DELETE from students WHERE id = %s", (student_id, ))
         connection.commit()
         cursor.close()
         connection.close()
@@ -257,7 +268,7 @@ class InsertDialog(QDialog):
         mobile = self.mobile.text()
         connection = DatabaseConnection().connect()
         cursor = connection.cursor()
-        cursor.execute("INSERT INTO students (name, course, mobile) VALUES (?, ?, ?)",
+        cursor.execute("INSERT INTO students (name, course, mobile) VALUES (%s, %s, %s)",
                        (name, course, mobile))
         connection.commit()
         cursor.close()
@@ -290,7 +301,8 @@ class SearchDialog(QDialog):
         name = self.student_name.text()
         connection = DatabaseConnection().connect()
         cursor = connection.cursor()
-        result = cursor.execute("SELECT * FROM students WHERE name = ?", (name,))
+        cursor.execute("SELECT * FROM students WHERE name = %s", (name,))
+        result =cursor.fetchall()
         rows = list(result)
         print(rows)
         items = main_window.table.findItems(name, Qt.MatchFlag.MatchFixedString)
